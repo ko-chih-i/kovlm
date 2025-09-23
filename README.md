@@ -1,30 +1,10 @@
-# Project Name
+# SD-VLM: Spatial Measuring and Understanding with Depth-Encoded Vision-Language Models
 
-> **Note: This repository is currently empty and under active development.**
->
-> **We are excited to announce that the code will be open-sourced soon!**
+
+> **We are excited to announce that our paper is accepted by NeurIPS 2025!**
 
 ---
 
 ## 🚧 Status: Coming Soon
+More details are coming soon.
 
-This repository is prepared as the future home of our project. We are in the final stages of internal development, code cleanup, and documentation preparation before making the full source code publicly available.
-
-## 🎯 What to Expect
-
-Once open-sourced, this repository will include:
-*   **Full source code**
-*   **Comprehensive documentation**
-*   **Installation and usage guides**
-*   **Example scripts and demos**
-*   **Contribution guidelines**
-
-## 📅 Stay Tuned
-
-We are committed to open sourcing this project. Please watch this repository or check back later for updates.
-
-**Expected Release: Q3 2025**
-
----
-
-*This empty repository is a placeholder for upcoming open-source work.*
