@@ -29,6 +29,9 @@ pip install -e .
 ```
 pip install -e ".[train]"
 ```
+## MSMU (Massive Spatial Measuring and Understanding) Dataset
+For instruction tuning, please download the train.parquet of MSMU Dataset from [[HuggingFace](https://huggingface.co/datasets/cpystan/MSMU)]. 
+For evaluation on MSMU-Bench, please download the test.parquet of MSMU Dataset from [[HuggingFace](https://huggingface.co/datasets/cpystan/MSMU)]. 
 
 
 
