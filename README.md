@@ -1,6 +1,5 @@
-# SD-VLM: Spatial Measuring and Understanding with Depth-Encoded Vision-Language Models
+# 👷SD-VLM: Spatial Measuring and Understanding with Depth-Encoded Vision-Language Models
 
-# 🌋 LLaVA: Large Language and Vision Assistant
 
 [📢 [[Project Page](https://cpystan.github.io/SD_VLM_pages/)] [[Arxiv](https://arxiv.org/abs/2509.17664)]  [[Data](https://huggingface.co/datasets/cpystan/MSMU)] 
 
