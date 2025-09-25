@@ -9,6 +9,30 @@
 
 ---
 
+## Install
+
+1. Clone this repository
+```bash
+git clone https://github.com/cpystan/SD-VLM.git
+cd SD-VLM
+```
+
+2. Install Package
+```Shell
+conda create -n sdvlm python=3.10 -y
+conda activate sdvlm
+pip install --upgrade pip  # enable PEP 660 support
+pip install -e .
+```
+
+3. Install additional packages for training cases
+```
+pip install -e ".[train]"
+pip install flash-attn --no-build-isolation
+```
+
+
+
 ## 🚧 Status: Coming Soon
 More details are coming soon.
 
