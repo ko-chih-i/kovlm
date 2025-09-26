@@ -1,7 +1,7 @@
 # 👷SD-VLM: Spatial Measuring and Understanding with Depth-Encoded Vision-Language Models
 
 
-[📢 [[Project Page](https://cpystan.github.io/SD_VLM_pages/)] [[Arxiv](https://arxiv.org/abs/2509.17664)]  [[Data](https://huggingface.co/datasets/cpystan/MSMU)] [[Model Zoo]([https://huggingface.co/datasets/cpystan/MSMU](https://huggingface.co/cpystan/SD-VLM-7B))] 
+[📢 [[Project Page](https://cpystan.github.io/SD_VLM_pages/)] [[Arxiv](https://arxiv.org/abs/2509.17664)]  [[Data](https://huggingface.co/datasets/cpystan/MSMU)] [[Model Zoo](https://huggingface.co/cpystan/SD-VLM-7B)] 
 
 
 
