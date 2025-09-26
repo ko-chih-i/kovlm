@@ -37,10 +37,17 @@ For evaluation on MSMU-Bench, please download the test.parquet of MSMU Dataset f
 ## Training
 SD-VLM inherits the instruction-tuning pipeline of LLaVA, based on the well-established checkpoint of [LLaVA-1.5-7B](https://github.com/haotian-liu/LLaVA/). It requires relatively low resources for GPUs since SD-VLM can be trained with LoRA on 8 V100 GPUs. 
 
-1. LoRA Training (official setting)
+1. LoRA Finetuning (official setting)
 ```Shell
 sh scripts/v1_5/finetune_task_lora.sh
 ```
+
+1. Non-LoRA Finetuning (official setting)
+```Shell
+sh scripts/v1_5/finetune_task.sh
+```
+
+Some arguments in the script need to be modified:
 
 - `--model_name_or_path`: path to the checkpoint of LLaVA-1.5-7B
 - `--data_path`: path to the train set of MSMU
