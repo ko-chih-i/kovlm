@@ -42,7 +42,7 @@ SD-VLM inherits the instruction-tuning pipeline of LLaVA, based on the well-esta
 sh scripts/v1_5/finetune_task_lora.sh
 ```
 
-1. Non-LoRA Finetuning (official setting)
+1. Non-LoRA Finetuning 
 ```Shell
 sh scripts/v1_5/finetune_task.sh
 ```
