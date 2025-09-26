@@ -42,6 +42,12 @@ SD-VLM inherits the instruction-tuning pipeline of LLaVA, based on the well-esta
 sh scripts/v1_5/finetune_task_lora.sh
 ```
 
+- `--model_name_or_path`: path to the checkpoint of LLaVA-1.5-7B
+- `--data_path`: path to the train set of MSMU
+- `--vision_tower`: path to clip-vit-large-patch14-336
+- `--depth_path`: path to depth_anything_v2_vitl
+
+
 
 
 
