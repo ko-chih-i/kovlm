@@ -159,6 +159,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -185,6 +186,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 labels,
                 images,
                 ori_imgs,
+                
                 image_sizes
             )
 
@@ -208,7 +210,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         inputs: Optional[torch.Tensor] = None,
         images: Optional[torch.Tensor] = None,
         image_sizes: Optional[torch.Tensor] = None,
-        ori_imgs: Optional[torch.Tensor] = None,
+        ori_imgs: Optional[torch.Tensor] = None,depth_features=None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         position_ids = kwargs.pop("position_ids", None)
@@ -218,7 +220,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
 
         if images is not None:
             (
-                inputs,
+                input_ids,
                 position_ids,
                 attention_mask,
                 _,
@@ -232,6 +234,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 None,
                 images,
                 ori_imgs,
+                depth_features=depth_features ,
                 image_sizes=image_sizes
             )
         else:
@@ -243,18 +246,74 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             inputs_embeds=inputs_embeds,
             **kwargs
         )
-
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None,
-                                      inputs_embeds=None, **kwargs):
-        images = kwargs.pop("images", None)
-        image_sizes = kwargs.pop("image_sizes", None)
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs
+    ):
+        print("\n====================== [DEBUG] prepare_inputs_for_generation ======================")
+    
+        # 🧩 1️⃣ 基本資訊
+        print(f"🔹 input_ids shape = {tuple(input_ids.shape) if input_ids is not None else 'None'}")
+        print(f"🔹 inputs_embeds shape = {tuple(inputs_embeds.shape) if inputs_embeds is not None else 'None'}")
+    
+        # 🧠 2️⃣ cache 狀態
+        if past_key_values is None:
+            print("⚪ past_key_values = None → 第一次 forward")
+        else:
+            print(f"🟢 past_key_values 已建立，層數 = {len(past_key_values)}")
+            try:
+                k_shape = past_key_values[0][0].shape
+                v_shape = past_key_values[0][1].shape
+                print(f"   Layer[0] K shape: {k_shape}")
+                print(f"   Layer[0] V shape: {v_shape}")
+                print(f"   🔸 cache_seq_len = {k_shape[2]}")
+            except Exception as e:
+                print(f"   ⚠️ 無法讀取 cache shape: {e}")
+    
+        # 🪄 3️⃣ 呼叫父類別 (HuggingFace)
         inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, **kwargs
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            **kwargs
         )
-        if images is not None:
-            inputs['images'] = images
-        if image_sizes is not None:
-            inputs['image_sizes'] = image_sizes
+    
+        # 🧮 4️⃣ attention mask 檢查
+        attn_mask = inputs.get("attention_mask", None)
+        if attn_mask is not None:
+            print(f"🧮 attention_mask shape after super(): {tuple(attn_mask.shape)}")
+        else:
+            print("⚠️ attention_mask = None after super()")
+    
+        # 🚦 5️⃣ 控制行為
+        if past_key_values is None:
+            print("✅ 第一次 forward → 保留 multimodal 輸入")
+            for key in ["images", "image_sizes", "ori_imgs", "depth_features"]:
+                if key in kwargs:
+                    inputs[key] = kwargs[key]
+        else:
+            print("🚫 使用 cache → 僅處理新 token")
+    
+            # ⚙️ 關鍵：清除殘留的舊 embedding
+            inputs["inputs_embeds"] = None
+            if "inputs_embeds" in kwargs:
+                kwargs.pop("inputs_embeds")
+    
+            # ⚠️ 確認 Hugging Face 已自動裁切 input_ids[:, -1:]
+            if input_ids.shape[1] > 1:
+                print(f"⚠️ 注意：HF 傳入時 input_ids={input_ids.shape}，理論上 forward 只應取最後一個 token")
+    
+            # 🧩 Debug 檢查 cache / mask 同步
+            cache_len = past_key_values[0][0].shape[2]
+            mask_len = attn_mask.shape[1] if attn_mask is not None else -1
+            print(f"[CHECK] cache={cache_len}, mask={mask_len}")
+    
+            # 🧩 額外安全檢查每層 K/V 長度
+            for i, (k, v) in enumerate(past_key_values):
+                if k.shape[2] != v.shape[2]:
+                    print(f"🚨 層 {i} K/V 不符: K={k.shape}, V={v.shape}")
+                    raise RuntimeError(f"❌ 第 {i} 層 cache K/V 長度不符")
+    
+        print("===================================================================================\n")
         return inputs
 
 AutoConfig.register("llava_llama", LlavaConfig)

@@ -1,4 +1,4 @@
-#    Copyright 2023 Haotian Liu
+ #Copyright 2023 Haotian Liu
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import numpy as np
 
 from torchvision.transforms import ToPILImage
 from PIL import Image
-
+import cv2
 class LlavaMetaModel:
 
     def __init__(self, config):
@@ -215,7 +215,7 @@ class LlavaMetaForCausalLM(ABC):
         image_features = self.get_model().get_vision_tower()(images)
         image_features = self.get_model().mm_projector(image_features)
         return image_features
-
+   
     def encode_depth(self, images, target_size, alpha=100):
 
         with torch.no_grad():
@@ -311,87 +311,96 @@ class LlavaMetaForCausalLM(ABC):
 
     def prepare_inputs_labels_for_multimodal(
         self, input_ids, position_ids, attention_mask, past_key_values, labels,
-        images, ori_imgs, image_sizes=None
+        images, ori_imgs, image_sizes=None,depth_features=None
     ):
-        #torch.cuda.empty_cache()
+        print("\n================= [DEBUG: multimodal flow check] =================")
+    
         vision_tower = self.get_vision_tower()
         if vision_tower is None or images is None or input_ids.shape[1] == 1:
+            
+            
             return input_ids, position_ids, attention_mask, past_key_values, None, labels
-
-        if type(images) is list or images.ndim == 5:
-            if type(images) is list:
+    
+        # ======================================================
+        # Stage 1️⃣ Encode image + depth features
+        # ======================================================
+        print("\n[Stage 1] 🔍 Extracting image & depth features...")
+    
+        if isinstance(images, list) or images.ndim == 5:
+            if isinstance(images, list):
                 images = [x.unsqueeze(0) if x.ndim == 3 else x for x in images]
-
             concat_images = torch.cat([image for image in images], dim=0)
-
+            image_features = vision_tower(concat_images)
             split_sizes = [image.shape[0] for image in images]
             image_features = torch.split(image_features, split_sizes, dim=0)
-            mm_patch_merge_type = getattr(self.config, 'mm_patch_merge_type', 'flat')
-            image_aspect_ratio = getattr(self.config, 'image_aspect_ratio', 'square')
-            if mm_patch_merge_type == 'flat':
-                image_features = [x.flatten(0, 1) for x in image_features]
-            elif mm_patch_merge_type.startswith('spatial'):
-                new_image_features = []
-                for image_idx, image_feature in enumerate(image_features):
-                    if image_feature.shape[0] > 1:
-                        base_image_feature = image_feature[0]
-                        image_feature = image_feature[1:]
-                        height = width = self.get_vision_tower().num_patches_per_side
-                        assert height * width == base_image_feature.shape[0]
-                        if image_aspect_ratio == 'anyres':
-                            num_patch_width, num_patch_height = get_anyres_image_grid_shape(image_sizes[image_idx], self.config.image_grid_pinpoints, self.get_vision_tower().config.image_size)
-                            image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
-                        else:
-                            raise NotImplementedError
-                        if 'unpad' in mm_patch_merge_type:
-                            image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
-                            image_feature = image_feature.flatten(1, 2).flatten(2, 3)
-                            image_feature = unpad_image(image_feature, image_sizes[image_idx])
-                            image_feature = torch.cat((
-                                image_feature,
-                                self.model.image_newline[:, None, None].expand(*image_feature.shape[:-1], 1).to(image_feature.device)
-                            ), dim=-1)
-                            image_feature = image_feature.flatten(1, 2).transpose(0, 1)
-                        else:
-                            image_feature = image_feature.permute(0, 2, 1, 3, 4).contiguous()
-                            image_feature = image_feature.flatten(0, 3)
-                        image_feature = torch.cat((base_image_feature, image_feature), dim=0)
-                    else:
-                        image_feature = image_feature[0]
-                        if 'unpad' in mm_patch_merge_type:
-                            image_feature = torch.cat((
-                                image_feature,
-                                self.model.image_newline[None].to(image_feature.device)
-                            ), dim=0)
-                    new_image_features.append(image_feature)
-                image_features = new_image_features
-            else:
-                raise ValueError(f"Unexpected mm_patch_merge_type: {self.config.mm_patch_merge_type}")
+            image_features = [x.flatten(0, 1) for x in image_features]
         else:
-            image_features = self.encode_images(images)               
-   
-
-        target_size=(24,24)
-        if self.gt_depth:
-        # directly extract depth from depth image
-            depth_features = self.resize_depth(ori_imgs,target_size)
-        else:
-        # generate depth embedding using depth model
-            depth_features = self.encode_depth(ori_imgs,target_size)
-            # # fuse depth embedding
-        if self.use_depth:
-            image_features = self.depth_sincos_encoding(image_features,depth_features)
-
+            image_features = self.encode_images(images)
+    
+        print(f"✅ image_features[0] shape = {list(image_features[0].shape)}")
+        print(f"🧩 image_features type before return = {type(image_features)}")
+        if isinstance(image_features, list):
+            image_features = torch.stack(image_features, dim=0)
+            print(f"🧩 強制轉成 tensor, shape = {list(image_features.shape)}")
         
 
-        # TODO: image start / end is not implemented here to support pretraining.
-        if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):
-            raise NotImplementedError
+        print(f"🧩 self.gt_depth={self.gt_depth}, self.use_depth={self.use_depth}")
+        print(f"🔍 images type={type(images)}, "
+          f"islist={isinstance(images, list)}, "
+          f"elem0_type={type(images[0]) if isinstance(images, list) else 'N/A'}")
+        print(f"🔍 ori_imgs type={type(ori_imgs)}, "
+          f"islist={isinstance(ori_imgs, list)}, "
+          f"elem0_type={type(ori_imgs[0]) if isinstance(ori_imgs, list) else 'N/A'}")
 
-        # Let's just add dummy tensors if they do not exist,
-        # it is a headache to deal with None all the time.
-        # But it is not ideal, and if you have a better idea,
-        # please open an issue / submit a PR, thanks.
+        
+        print(f"🧩 ori_imgs type={type(ori_imgs)}")
+        # ======================================================
+# Stage 1️⃣ Encode image + depth features
+# ======================================================
+        if depth_features is None:
+            print("🧩 沒有外部 depth_features，執行 encode_depth() ...")
+            target_size = (24, 24)
+            if self.gt_depth:
+                depth_features = self.resize_depth(ori_imgs, target_size)
+            else:
+                depth_features = self.encode_depth(ori_imgs, target_size)
+        else:
+            print(f"🧩 使用外部傳入的 depth_features，len={len(depth_features)} shape={list(depth_features[0].shape)}")
+
+    
+        # === depth fusion ===
+        if self.use_depth:
+            print("⚙️ 開始執行 depth_sincos_encoding() ...")
+            image_features = self.depth_sincos_encoding(image_features, depth_features)
+            # ⬇️ 這裡加入統計檢查
+            if isinstance(image_features, list):
+                sample_feat = image_features[0]
+            else:
+                sample_feat = image_features
+            print(f"✅ depth_sincos_encoding() 融合成功，特徵 shape={list(sample_feat[0].shape) if sample_feat.ndim==3 else list(sample_feat.shape)}")
+            print(f"   mean={sample_feat.cpu().mean().item():.4f}, std={sample_feat.cpu().std().item():.4f}")
+
+        else:
+            print("⚠️ self.use_depth=False，跳過深度融合")
+    
+        # ✅ Safe convert: 確保 image_features 不會是 list，否則 model.generate 會報錯
+        if isinstance(image_features, list):
+            if len(image_features) == 1:
+                image_features = image_features[0].unsqueeze(0)  # [1, patch_num, hidden_dim]
+                print(f"🩵 image_features list -> tensor (single), shape={list(image_features.shape)}")
+            else:
+                try:
+                    image_features = torch.stack(image_features, dim=0)
+                    print(f"🩵 image_features list -> tensor (stacked), shape={list(image_features.shape)}")
+                except Exception as e:
+                    print(f"⚠️ image_features stack failed: {e}")
+    
+        print("----------------------------------------------------------")
+
+        # ======================================================
+        # Stage 4️⃣ Embedding + Replacement flow
+        # ======================================================
+       
         _labels = labels
         _position_ids = position_ids
         _attention_mask = attention_mask
@@ -403,18 +412,22 @@ class LlavaMetaForCausalLM(ABC):
             position_ids = torch.arange(0, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
         if labels is None:
             labels = torch.full_like(input_ids, IGNORE_INDEX)
-
-        # remove the padding using attention_mask -- FIXME
+         
         _input_ids = input_ids
+        print(_input_ids)
         input_ids = [cur_input_ids[cur_attention_mask] for cur_input_ids, cur_attention_mask in zip(input_ids, attention_mask)]
+      
+    
         labels = [cur_labels[cur_attention_mask] for cur_labels, cur_attention_mask in zip(labels, attention_mask)]
-
+    
         new_input_embeds = []
         new_labels = []
         cur_image_idx = 0
         for batch_idx, cur_input_ids in enumerate(input_ids):
             num_images = (cur_input_ids == IMAGE_TOKEN_INDEX).sum()
+            print(f"🧩 Batch {batch_idx} - num_images={num_images}")
             if num_images == 0:
+                print("⚠️ No -200 token in this batch, skip image feature insertion.")
                 cur_image_features = image_features[cur_image_idx]
                 cur_input_embeds_1 = self.get_model().embed_tokens(cur_input_ids)
                 cur_input_embeds = torch.cat([cur_input_embeds_1, cur_image_features[0:0]], dim=0)
@@ -422,20 +435,20 @@ class LlavaMetaForCausalLM(ABC):
                 new_labels.append(labels[batch_idx])
                 cur_image_idx += 1
                 continue
-
+    
             image_token_indices = [-1] + torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0].tolist() + [cur_input_ids.shape[0]]
             cur_input_ids_noim = []
             cur_labels = labels[batch_idx]
             cur_labels_noim = []
             for i in range(len(image_token_indices) - 1):
-                cur_input_ids_noim.append(cur_input_ids[image_token_indices[i]+1:image_token_indices[i+1]])
-                cur_labels_noim.append(cur_labels[image_token_indices[i]+1:image_token_indices[i+1]])
+                cur_input_ids_noim.append(cur_input_ids[image_token_indices[i] + 1:image_token_indices[i + 1]])
+                cur_labels_noim.append(cur_labels[image_token_indices[i] + 1:image_token_indices[i + 1]])
             split_sizes = [x.shape[0] for x in cur_labels_noim]
             cur_input_embeds = self.get_model().embed_tokens(torch.cat(cur_input_ids_noim))
             cur_input_embeds_no_im = torch.split(cur_input_embeds, split_sizes, dim=0)
             cur_new_input_embeds = []
             cur_new_labels = []
-
+    
             for i in range(num_images + 1):
                 cur_new_input_embeds.append(cur_input_embeds_no_im[i])
                 cur_new_labels.append(cur_labels_noim[i])
@@ -443,23 +456,24 @@ class LlavaMetaForCausalLM(ABC):
                     cur_image_features = image_features[cur_image_idx]
                     cur_image_idx += 1
                     cur_new_input_embeds.append(cur_image_features)
-                    cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=cur_labels.device, dtype=cur_labels.dtype))
-
-            cur_new_input_embeds = [x.to(self.device) for x in cur_new_input_embeds]
-
+                    cur_new_labels.append(torch.full((cur_image_features.shape[0],),
+                                                     IGNORE_INDEX, device=cur_labels.device, dtype=cur_labels.dtype))
+    
+           # cur_new_input_embeds = [x.to(self.device) for x in cur_new_input_embeds]
             cur_new_input_embeds = torch.cat(cur_new_input_embeds)
             cur_new_labels = torch.cat(cur_new_labels)
-
+    
             new_input_embeds.append(cur_new_input_embeds)
             new_labels.append(cur_new_labels)
-
-        # Truncate sequences to max length as image embeddings can make the sequence longer
-        tokenizer_model_max_length = getattr(self.config, 'tokenizer_model_max_length', None)
-        if tokenizer_model_max_length is not None:
-            new_input_embeds = [x[:tokenizer_model_max_length] for x in new_input_embeds]
-            new_labels = [x[:tokenizer_model_max_length] for x in new_labels]
-
-        # Combine them
+         
+        print("✅ 替換階段完成，成功生成 new_input_embeds 與 new_labels")
+        print(new_input_embeds)
+        print( new_labels)
+        print("================================================================\n")
+      
+        # ======================================================
+        # Stage 5️⃣ Padding & Return
+        # ======================================================
         max_len = max(x.shape[0] for x in new_input_embeds)
         batch_size = len(new_input_embeds)
 
@@ -506,6 +520,7 @@ class LlavaMetaForCausalLM(ABC):
 
 
         return None, position_ids, attention_mask, past_key_values, new_input_embeds, new_labels
+
 
     def initialize_vision_tokenizer(self, model_args, tokenizer):
         if model_args.mm_use_im_patch_token:

@@ -26,8 +26,10 @@ class CLIPVisionTower(nn.Module):
             print('{} is already loaded, `load_model` called again, skipping.'.format(self.vision_tower_name))
             return
 
-        self.image_processor = CLIPImageProcessor.from_pretrained(self.vision_tower_name)
-        self.vision_tower = CLIPVisionModel.from_pretrained(self.vision_tower_name, device_map=device_map)
+        local_path = "/home/itris3/SD-VLM/llava/model/clip-vit-large-patch14-336"
+        print(f"✅ [SD-VLM] Forcing CLIPVisionTower to load from local path: {local_path}")
+        self.image_processor = CLIPImageProcessor.from_pretrained(local_path)
+        self.vision_tower = CLIPVisionModel.from_pretrained(local_path, device_map=device_map)
         self.vision_tower.requires_grad_(False)
 
         self.is_loaded = True
@@ -134,17 +136,44 @@ class CLIPVisionTowerS2(CLIPVisionTower):
         return image_features
 
     @torch.no_grad()
-    def forward(self, images):
-        if type(images) is list:
+    def forward(self, images, depths=None):
+        if isinstance(images, list):
             image_features = []
             for image in images:
-                image_feature = self.multiscale_forward(self.forward_feature, image.unsqueeze(0), img_sizes=self.s2_scales, max_split_size=self.s2_split_size)
+                out = self.vision_tower(
+                    image.to(device=self.device, dtype=self.dtype).unsqueeze(0),
+                    output_hidden_states=True
+                )
+                # 🔧 強制取出最後一層 hidden state
+                if hasattr(out, "last_hidden_state"):
+                    out = out.last_hidden_state
+                elif isinstance(out, tuple):
+                    out = out[0]
+    
+                image_feature = self.feature_select(out).to(image.dtype)
                 image_features.append(image_feature)
+            return torch.cat(image_features, dim=0)
         else:
-            image_features = self.multiscale_forward(self.forward_feature, images, img_sizes=self.s2_scales, max_split_size=self.s2_split_size)
-
-        return image_features
-
+            if depths is not None:
+                outs = self.vision_tower(
+                    images.to(device=self.device, dtype=self.dtype),
+                    output_hidden_states=True,
+                    depths=depths
+                )
+            else:
+                outs = self.vision_tower(
+                    images.to(device=self.device, dtype=self.dtype),
+                    output_hidden_states=True
+                )
+    
+            # 🔧 同樣強制取出 tensor
+            if hasattr(outs, "last_hidden_state"):
+                outs = outs.last_hidden_state
+            elif isinstance(outs, tuple):
+                outs = outs[0]
+    
+            image_features = self.feature_select(outs).to(images.dtype)
+            return image_features
     @property
     def hidden_size(self):
         return self.config.hidden_size * len(self.s2_scales)
