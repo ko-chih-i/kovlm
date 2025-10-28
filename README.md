@@ -86,6 +86,20 @@ sh scripts/v1_5/finetune_task_lora.sh
 1. Non-LoRA Finetuning 
 ```Shell
 sh scripts/v1_5/finetune_task.sh
+
+
+ 1.下載https://huggingface.co/liuhaotian/llava-v1.5-7b/tree/main  --model_name_or_path: 
+ 2.下載https://huggingface.co/datasets/cpystan/MSMU/blob/main/train.parquet --data_path: 
+ 3.下載https://huggingface.co/openai/clip-vit-large-patch14-336/tree/main   --vision_tower:
+ 4.下載https://github.com/ko-chih-i/kovlm/tree/main/llava/model/depth -Large  --depth_path:
+ 5. (可選)環境https://github.com/ko-chih-i/kovlm/blob/main/SDVLM5090_env.yml
+    model_path = "/home/itris3/SD-VLM/SD-VLM-7B"
+    data_path = "/home/itris3/SD-VLM/test.parquet"
+    vision_tower_path = "/home/itris3/SD-VLM/llava/model/clip-vit-large-patch14-336"
+    depth_ckpt = "/home/itris3/SD-VLM/llava/model/depth/depth_anything_v2/depth_anything_v2_vitl.pth"
+	執行sh scripts/v1_5/finetune_task_lora.sh
+	
+	
 ```
 
 Some arguments in the script need to be modified:
