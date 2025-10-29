@@ -1,53 +1,40 @@
-FROM mcr.microsoft.com/devcontainers/base:ubuntu-20.04
+FROM nvidia/cuda:12.8.0-base-ubuntu22.04
 
 SHELL [ "bash", "-c" ]
 
-# update apt and install packages
 RUN apt update && \
     apt install -yq \
         ffmpeg \
-        dkms \
-        build-essential
+        build-essential \
+        wget \
+        curl \
+        git \
+        sudo
 
-# add user tools
-RUN sudo apt install -yq \
-        jq \
-        jp \
-        tree \
-        tldr
-
-# add git-lfs and install
+# git-lfs
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash && \
     sudo apt-get install -yq git-lfs && \
     git lfs install
 
-############################################
-# Setup user
-############################################
-
-USER vscode
-
-# install azcopy, a tool to copy to/from blob storage
-# for more info: https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-blobs-upload#upload-a-file
-RUN cd /tmp && \
-    wget https://azcopyvnext.azureedge.net/release20230123/azcopy_linux_amd64_10.17.0.tar.gz && \
-    tar xvf azcopy_linux_amd64_10.17.0.tar.gz && \
-    mkdir -p ~/.local/bin && \
-    mv azcopy_linux_amd64_10.17.0/azcopy ~/.local/bin && \
-    chmod +x ~/.local/bin/azcopy && \
-    rm -rf azcopy_linux_amd64*
-
-# Setup conda
+# Miniconda
 RUN cd /tmp && \
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
-    bash ./Miniconda3-latest-Linux-x86_64.sh -b && \
+    bash ./Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda && \
     rm ./Miniconda3-latest-Linux-x86_64.sh
 
-# Install dotnet
-RUN cd /tmp && \
-    wget https://dot.net/v1/dotnet-install.sh && \
-    chmod +x dotnet-install.sh && \
-    ./dotnet-install.sh --channel 7.0 && \
-    ./dotnet-install.sh --channel 3.1 && \
-    rm ./dotnet-install.sh
+ENV PATH=/opt/conda/bin:$PATH
+
+
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+WORKDIR /app
+COPY . /app
+RUN /opt/conda/bin/conda create -n sdvlm python=3.10 -y && \
+    /opt/conda/bin/conda run -n sdvlm pip install --upgrade pip && \
+    /opt/conda/bin/conda run -n sdvlm pip install -e . && \
+    /opt/conda/bin/conda run -n sdvlm pip install -e ".[train]"
+
+SHELL ["conda", "run", "-n", "sdvlm", "/bin/bash", "-c"]
+
 
