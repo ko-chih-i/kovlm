@@ -1,14 +1,16 @@
 #!/bin/bash
 export PYTHONPATH=./:$PYTHONPATH
-model_name_or_path=ckpts/llava-v1.5-7b
-data_path=/MSMU/train.parquet
-vision_tower=/ckpts/clip-vit-large-patch14-336 # if changed, the corresponding path in LLava1.5 file need also to be changed
+#!/bin/bash
+export PYTHONPATH=./:$PYTHONPATH
 
-depth_path=/ckpts/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth
+model_name_or_path="/home/itri/SD-VLM/llava157b"
+data_path="/home/itri/SD-VLM/train.parquet"
+vision_tower="/home/itri/SD-VLM/llava/model/clip-vit-large-patch14-336"
+depth_path="/home/itri/SD-VLM/llava/model/depth/depth_anything_v2/depth_anything_v2_vitl.pth"
 
 gt_depth=False
 use_depth=True
-include=localhost:0,1,2,3,4,5,6,7
+include=localhost:0,1
 deepspeed --include $include llava/train/train_xformers.py \
     --lora_enable True --lora_r 128 --lora_alpha 256 --mm_projector_lr 2e-5 \
     --deepspeed ./scripts/zero2.json \
